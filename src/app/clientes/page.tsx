@@ -1,26 +1,28 @@
 'use client'
-import { Box, Button, Table, Heading, Badge, Stack, Text, IconButton } from "@chakra-ui/react"
-import { Play, Download, Settings } from "lucide-react"
+import { Box, Button, Table, Badge, Stack, Flex, IconButton } from "@chakra-ui/react"
+import { Play, Settings, FolderOpen } from "lucide-react"
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 
 export default function DashboardSagres() {
     const [clientes, setClientes] = useState([])
-    // Agora o TS entende: "Pode ser uma string ou null"
     const [loading, setLoading] = useState<string | null>(null);
-    // Busca os clientes da sua API na Droplet (ou localhost por enquanto)
+    const router = useRouter(); // <-- Hook de navegação do Next.js adicionado
+
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
     useEffect(() => {
-        fetch('http://localhost:3001/api/clientes')
+        fetch(`${API_URL}/api/clientes`)
             .then(res => res.json())
             .then(data => setClientes(data))
-    }, [])
+    }, [API_URL])
 
     const handleRodarRobo = async (clienteId: string) => {
         setLoading(clienteId)
         try {
-            // Mandamos o timestamp de HOJE (meia-noite) para o crawler
             const hoje = new Date().setHours(0, 0, 0, 0) / 1000;
 
-            await fetch('http://localhost:3001/api/pipeline', {
+            await fetch(`${API_URL}/api/pipeline`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ clienteId, timestamp: hoje.toString() })
@@ -34,14 +36,20 @@ export default function DashboardSagres() {
     }
 
     return (
-        <Box p={10}>
+        <Flex flexDir={'column'} px={8} py={8}>
             <Stack gap={8}>
-                <Box display="flex" justifyContent="space-between" alignItems="center">
-                    <Heading size="lg">Portal de Inteligência Sagres</Heading>
-                    <Button colorPalette="blue" variant="solid">Novo Cliente</Button>
+                <Box display="flex" justifyContent="end" alignItems="center">
+                    {/* Botão Novo Cliente agora leva pra tela de cadastro */}
+                    <Button 
+                        colorPalette="blue" 
+                        variant="solid"
+                        onClick={() => router.push('/clientes/novo')}
+                    >
+                        Novo Cliente
+                    </Button>
                 </Box>
 
-                <Table.Root variant="outline" stickyHeader>
+                <Table.Root variant="line" stickyHeader>
                     <Table.Header>
                         <Table.Row bg="gray.50">
                             <Table.ColumnHeader>Empresa</Table.ColumnHeader>
@@ -68,7 +76,19 @@ export default function DashboardSagres() {
                                         >
                                             <Play size={14} style={{ marginRight: '8px' }} /> Rodar Robô
                                         </Button>
-                                        <IconButton aria-label="Settings" variant="ghost" size="sm">
+                                        
+                                        {/* NOVO BOTÃO: Direciona para a página de detalhes/histórico do cliente */}
+                                        <Button 
+                                            size="sm" 
+                                            colorPalette="blue" 
+                                            variant="solid"
+                                            onClick={() => router.push(`/clientes/${cliente._id}`)}
+                                        >
+                                            <FolderOpen size={14} style={{ marginRight: '8px' }} /> 
+                                            Ver Cliente
+                                        </Button>
+
+                                        <IconButton aria-label="Configurações" variant="ghost" size="sm">
                                             <Settings size={18} />
                                         </IconButton>
                                     </Stack>
@@ -78,6 +98,6 @@ export default function DashboardSagres() {
                     </Table.Body>
                 </Table.Root>
             </Stack>
-        </Box>
+        </Flex>
     )
 }
