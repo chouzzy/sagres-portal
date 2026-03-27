@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { ChakraProvider, Flex } from "@chakra-ui/react";
+import { ChakraProvider, Flex, Toast } from "@chakra-ui/react";
 import { Provider } from "@/components/ui/provider";
 import Navbar from "./components/Navbar";
+import { Toaster } from "@/components/ui/toaster";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -30,6 +31,7 @@ export default function RootLayout({
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <Provider>
           <Flex flexDir={'column'}>
+            <Toaster />
             <Navbar/>
             {children}
           </Flex>

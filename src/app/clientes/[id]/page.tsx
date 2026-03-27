@@ -1,10 +1,12 @@
 'use client'
 import { useParams, useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
-import { Box, Flex, Heading, Text, Table, Button, Badge, Stack, Textarea, Field, IconButton } from "@chakra-ui/react"
-import { Download, Brain, History, ArrowLeft, LoaderCircle } from "lucide-react"
+import { Box, Flex, Heading, Text, Table, Button, Stack, Textarea, Field, IconButton, Input } from "@chakra-ui/react"
+import { Download, Brain, History, ArrowLeft, LoaderCircle, Edit2, Check, X, Building2 } from "lucide-react"
+import { toaster } from "@/components/ui/toaster"
 
 export default function DetalhesCliente() {
+    
     const params = useParams()
     const router = useRouter()
     const clienteId = params.id as string
@@ -13,29 +15,89 @@ export default function DetalhesCliente() {
     const [historico, setHistorico] = useState<string[]>([])
     const [loading, setLoading] = useState(true)
 
+    // ESTADOS PARA A EDIÇÃO
+    const [isEditing, setIsEditing] = useState(false)
+    const [editContexto, setEditContexto] = useState("")
+    const [editEmail, setEditEmail] = useState("")
+    const [salvando, setSalvando] = useState(false)
+
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
     useEffect(() => {
-        // Busca os dados do cliente e o histórico em paralelo
-        Promise.all([
-            fetch(`${API_URL}/api/clientes/${clienteId}`).then(res => res.json()),
-            fetch(`${API_URL}/api/clientes/${clienteId}/historico`).then(res => res.json())
-        ])
-        .then(([dadosCliente, dadosHistorico]) => {
-            setCliente(dadosCliente)
-            setHistorico(dadosHistorico)
-        })
-        .finally(() => setLoading(false))
-    }, [clienteId, API_URL])
+        const carregarDados = () => {
+            Promise.all([
+                fetch(`${API_URL}/api/clientes/${clienteId}?t=${Date.now()}`).then(res => res.json()),
+                fetch(`${API_URL}/api/clientes/${clienteId}/historico?t=${Date.now()}`).then(res => res.json())
+            ])
+            .then(([dadosCliente, dadosHistorico]) => {
+                setCliente(dadosCliente)
+                
+                // Preenche os campos de edição na primeira vez que carrega
+                if (!isEditing) {
+                    setEditContexto(dadosCliente.contextoIA)
+                    setEditEmail(dadosCliente.emailNotificacao)
+                }
+
+                setHistorico(dadosHistorico)
+            })
+            .finally(() => setLoading(false))
+        };
+
+        carregarDados();
+        const interval = setInterval(carregarDados, 5000); 
+        return () => clearInterval(interval);
+    }, [clienteId, API_URL, isEditing]) // Adicionamos isEditing na dependência para ele não sobrescrever o que estamos digitando
 
     const handleBaixarExcel = (timestamp: string) => {
-        // Abre a rota de download específica para AQUELA DATA
         window.open(`${API_URL}/api/reports/download/${clienteId}/${timestamp}`, '_blank');
     };
 
-    // Função auxiliar para formatar o timestamp Unix em data brasileira
     const formatarData = (timestamp: string) => {
         return new Date(Number(timestamp) * 1000).toLocaleDateString('pt-BR');
+    }
+
+    // FUNÇÃO PARA SALVAR A EDIÇÃO NO BACKEND
+    const handleSalvarEdicao = async () => {
+        setSalvando(true);
+        try {
+            const res = await fetch(`${API_URL}/api/clientes/${clienteId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contextoIA: editContexto,
+                    emailNotificacao: editEmail
+                })
+            });
+
+            if (res.ok) {
+                const clienteAtualizado = await res.json();
+                setCliente(clienteAtualizado); // Atualiza a tela com os dados novos
+                setIsEditing(false); // Sai do modo edição
+                
+                toaster.create({
+                    title: "Sucesso!",
+                    description: "As informações do cérebro da IA foram atualizadas.",
+                    type: "success",
+                });
+            } else {
+                throw new Error("Falha ao salvar");
+            }
+        } catch (error) {
+            toaster.create({
+                title: "Erro",
+                description: "Não foi possível salvar as alterações. Tente novamente.",
+                type: "error",
+            });
+        } finally {
+            setSalvando(false);
+        }
+    }
+
+    // Função para cancelar a edição e voltar ao texto original
+    const handleCancelarEdicao = () => {
+        setEditContexto(cliente?.contextoIA);
+        setEditEmail(cliente?.emailNotificacao);
+        setIsEditing(false);
     }
 
     if (loading) return (
@@ -47,7 +109,6 @@ export default function DetalhesCliente() {
     return (
         <Flex flexDir={'column'} px={8} py={8}>
             <Stack gap={8}>
-                {/* Cabeçalho com Botão Voltar */}
                 <Flex align="center" gap={4}>
                     <IconButton aria-label="Voltar" variant="ghost" onClick={() => router.back()}>
                         <ArrowLeft />
@@ -55,28 +116,68 @@ export default function DetalhesCliente() {
                     <Heading size="lg">Monitoramento Tributário: {cliente?.nome}</Heading>
                 </Flex>
 
-                {/* Seção 1: Cérebro da IA (Contexto) */}
-                <Box p={6} borderWidth="1px" borderRadius="xl" bg="white" boxShadow="sm">
+                {/* CAIXA DO CONTEXTO DA IA */}
+                <Box p={6} borderWidth="1px" borderRadius="xl" bg="blue.900" boxShadow="sm">
                     <Stack gap={4}>
-                        <Flex align="center" gap={2} color="brand.500">
-                            <Brain />
-                            <Heading size="md" color="gray.800">Cérebro da IA (Contexto Tributário)</Heading>
+                        <Flex align="center" justify="space-between" w="full">
+                            <Flex align="center" gap={2} color="gray.50">
+                                <Building2 />
+                                <Heading size="md" color="gray.50">Resumo da Atividade do Cliente</Heading>
+                            </Flex>
+                            
+                            {/* BOTÕES DE EDIÇÃO */}
+                            {!isEditing ? (
+                                <Button size="sm" variant="solid" colorPalette="blue" onClick={() => setIsEditing(true)}>
+                                    <Edit2 size={16} style={{ marginRight: '6px' }} /> Editar Resumo
+                                </Button>
+                            ) : (
+                                <Flex gap={2}>
+                                    <Button size="sm" variant="solid" colorPalette="red" onClick={handleCancelarEdicao} disabled={salvando}>
+                                        <X size={16} /> Cancelar
+                                    </Button>
+                                    <Button size="sm" colorPalette="green" onClick={handleSalvarEdicao} loading={salvando}>
+                                        <Check size={16} style={{ marginRight: '6px' }} /> Salvar
+                                    </Button>
+                                </Flex>
+                            )}
                         </Flex>
+
                         <Field.Root>
                             <Textarea 
-                                value={cliente?.contextoIA} 
-                                readOnly // No MVP deixamos readOnly, na v2 fazemos editar
-                                height="150px" 
-                                bg="gray.50"
-                                resize="none"
+                                value={isEditing ? editContexto : cliente?.contextoIA} 
+                                onChange={(e) => setEditContexto(e.target.value)}
+                                readOnly={!isEditing} 
+                                height={isEditing ? "250px" : "150px"} // Aumenta a caixa quando vai editar
+                                bg={isEditing ? "white" : "gray.50"}
+                                borderWidth={isEditing ? "2px" : "1px"}
+                                borderColor={isEditing ? "blue.400" : "gray.200"}
+                                resize="vertical"
                             />
-                            <Field.HelperText>Este é o contexto usado pelo Gemini para filtrar as leis.</Field.HelperText>
+                            <Field.HelperText color='gray.50'>Este é o contexto usado pelo Gemini para filtrar as leis.</Field.HelperText>
                         </Field.Root>
-                        <Text color="gray.600">E-mail de Notificação: <b>{cliente?.emailNotificacao}</b></Text>
+
+                        <Field.Root>
+                            <Flex align="center" gap={2}>
+                                <Text color="gray.50" whiteSpace="nowrap">E-mail de Notificação:</Text>
+                                {isEditing ? (
+                                    <Input 
+                                        size="sm"
+                                        value={editEmail}
+                                        onChange={(e) => setEditEmail(e.target.value)}
+                                        bg="white"
+                                        borderColor="blue.400"
+                                        borderWidth="2px"
+                                    />
+                                ) : (
+                                    <Text fontWeight="bold" color="gray.50">{cliente?.emailNotificacao}</Text>
+                                )}
+                            </Flex>
+                        </Field.Root>
+
                     </Stack>
                 </Box>
 
-                {/* Seção 2: Histórico de Consultas */}
+                {/* CAIXA DO HISTÓRICO (Continua igual) */}
                 <Box p={6} borderWidth="1px" borderRadius="xl" bg="white" boxShadow="sm">
                     <Stack gap={4}>
                         <Flex align="center" gap={2} color="orange.500">
@@ -84,7 +185,19 @@ export default function DetalhesCliente() {
                             <Heading size="md" color="gray.800">Histórico de Relatórios Gerados</Heading>
                         </Flex>
 
-                        {historico.length === 0 ? (
+                        {cliente?.isProcessing && (
+                            <Box p={4} bg="yellow.50" borderWidth="1px" borderColor="yellow.200" borderRadius="md">
+                                <Flex align="center" gap={3} color="yellow.700">
+                                    <LoaderCircle size={20} className="animate-spin" />
+                                    <Box>
+                                        <Text fontWeight="bold" fontSize="sm">Busca de hoje em andamento...</Text>
+                                        <Text fontSize="xs">A extração dos diários e análise da IA pode levar alguns minutos. A planilha aparecerá aqui quando concluída.</Text>
+                                    </Box>
+                                </Flex>
+                            </Box>
+                        )}
+
+                        {historico.length === 0 && !cliente?.isProcessing ? (
                             <Text color="gray.500" py={4} textAlign="center">Nenhum relatório foi gerado para este cliente ainda.</Text>
                         ) : (
                             <Table.Root variant="line" size="sm">
